@@ -42,7 +42,7 @@ app.post("/analyze-syllabus", upload.single("file"), async (req, res) => {
         {
           type: "input_text",
           text:
-            'Read this syllabus image and return ONLY valid JSON in this exact format: {"courseName":"","professorName":"","categories":[{"name":"","weight":0}],"finalCategoryName":""}. Extract the course name, professor name, grading categories, and category weights. The weights must be numbers only. If the syllabus is unclear, make the best reasonable guess. Do not include any explanation, only JSON.'
+            "Extract the course name, professor name, final category name, and grading categories with numeric weights from this syllabus image."
         },
         {
           type: "input_image",
@@ -54,7 +54,7 @@ app.post("/analyze-syllabus", upload.single("file"), async (req, res) => {
         {
           type: "input_text",
           text:
-            'Read this syllabus PDF and return ONLY valid JSON in this exact format: {"courseName":"","professorName":"","categories":[{"name":"","weight":0}],"finalCategoryName":""}. Extract the course name, professor name, grading categories, and category weights. The weights must be numbers only. If the syllabus is unclear, make the best reasonable guess. Do not include any explanation, only JSON.'
+            "Extract the course name, professor name, final category name, and grading categories with numeric weights from this syllabus PDF."
         },
         {
           type: "input_file",
@@ -68,14 +68,68 @@ app.post("/analyze-syllabus", upload.single("file"), async (req, res) => {
       model: "gpt-4.1-mini",
       input: [
         {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "You extract structured syllabus grading data. Return only the requested schema."
+            }
+          ]
+        },
+        {
           role: "user",
           content
         }
-      ]
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "syllabus_grading_info",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              courseName: { type: "string" },
+              professorName: { type: "string" },
+              finalCategoryName: { type: "string" },
+              categories: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: "string" },
+                    weight: { type: "number" }
+                  },
+                  required: ["name", "weight"]
+                }
+              }
+            },
+            required: [
+              "courseName",
+              "professorName",
+              "finalCategoryName",
+              "categories"
+            ]
+          }
+        }
+      }
     });
 
     const rawText = response.output_text || "";
-    const parsed = JSON.parse(rawText);
+    console.log("AI RAW:", rawText);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (parseError) {
+      return res.status(500).json({
+        error: "AI did not return valid JSON.",
+        raw: rawText
+      });
+    }
 
     return res.json(parsed);
   } catch (error) {
